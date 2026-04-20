@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TV Remote</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg:        #111214;
+    --body:      #1a1c20;
+    --raised:    #22252b;
+    --border:    #2e3138;
+    --accent:    #e8401a;
+    --accent2:   #f07030;
+    --text:      #c8ccd4;
+    --dim:       #555a66;
+    --btn:       #252830;
+    --btn-top:   #2e3240;
+    --shadow:    rgba(0,0,0,0.6);
+    --glow:      rgba(232,64,26,0.35);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    font-family: 'Exo 2', sans-serif;
+  }
+
+  .remote {
+    width: 100%;
+    max-width: 360px;
+    min-height: 100vh;
+    background: linear-gradient(160deg, #1e2128 0%, #14161a 100%);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 28px 24px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--dim);
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background 0.4s, box-shadow 0.4s;
+  }
+
+  .dot.connected {
+    background: #3ddc84;
+    box-shadow: 0 0 8px rgba(61,220,132,0.6);
+  }
+
+  .dot.error {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--glow);
+  }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+
+  /* ── Power button ── */
+  .power-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .btn-power {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: radial-gradient(circle at 40% 35%, #2e1810, #1a0f0a);
+    box-shadow: 0 0 20px var(--glow), inset 0 1px 0 rgba(255,255,255,0.05);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, box-shadow 0.1s;
+    position: relative;
+  }
+
+  .btn-power:active {
+    transform: scale(0.92);
+    box-shadow: 0 0 8px var(--glow), inset 0 2px 4px rgba(0,0,0,0.5);
+  }
+
+  .btn-power svg {
+    width: 28px;
+    height: 28px;
+    stroke: var(--accent);
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+  }
+
+  /* ── Section label ── */
+  .label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  /* ── Numpad ── */
+  .numpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .btn-num {
+    aspect-ratio: 1;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: linear-gradient(160deg, var(--btn-top), var(--btn));
+    box-shadow: 0 4px 12px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text);
+    transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
+    user-select: none;
+  }
+
+  .btn-num:active {
+    transform: scale(0.93) translateY(2px);
+    box-shadow: 0 1px 4px var(--shadow), inset 0 2px 4px rgba(0,0,0,0.4);
+    background: linear-gradient(160deg, var(--btn), #1e2028);
+    color: #fff;
+  }
+
+  /* zero spans full width */
+  .btn-num.zero {
+    grid-column: 1 / -1;
+    aspect-ratio: unset;
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  /* ── Feedback toast ── */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    border-radius: 99px;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+<div class="remote">
+
+  <div class="header">
+    <span class="brand">TV Remote</span>
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <span id="status-text">connecting</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Power -->
+  <div class="power-wrap">
+    <button class="btn-power" onclick="send('power')" aria-label="Power">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 3v9"/>
+        <path d="M18.4 5.6a9 9 0 1 1-12.8 0"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="label">channels</div>
+
+  <!-- Number pad -->
+  <div class="numpad">
+    <button class="btn-num" onclick="send('1')">1</button>
+    <button class="btn-num" onclick="send('2')">2</button>
+    <button class="btn-num" onclick="send('3')">3</button>
+    <button class="btn-num" onclick="send('4')">4</button>
+    <button class="btn-num" onclick="send('5')">5</button>
+    <button class="btn-num" onclick="send('6')">6</button>
+    <button class="btn-num" onclick="send('7')">7</button>
+    <button class="btn-num" onclick="send('8')">8</button>
+    <button class="btn-num" onclick="send('9')">9</button>
+    <button class="btn-num zero" onclick="send('0')">0</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const MQTT_HOST  = "wss://17f6b2900b8c495ea6ce783a7db77bf7.s1.eu.hivemq.cloud:8884/mqtt";
+  const MQTT_USER  = "tvremote";
+  const MQTT_PASS  = "Remote112!";
+  const TOPIC      = "home/tv/command";
+
+  const dot        = document.getElementById('dot');
+  const statusText = document.getElementById('status-text');
+  const toast      = document.getElementById('toast');
+  let toastTimer;
+
+  // ── MQTT connect ──
+  const client = mqtt.connect(MQTT_HOST, {
+    username:  MQTT_USER,
+    password:  MQTT_PASS,
+    reconnectPeriod: 3000,
+  });
+
+  client.on('connect', () => {
+    dot.className = 'dot connected';
+    statusText.textContent = 'online';
+  });
+
+  client.on('error', () => {
+    dot.className = 'dot error';
+    statusText.textContent = 'error';
+  });
+
+  client.on('offline', () => {
+    dot.className = 'dot';
+    statusText.textContent = 'offline';
+  });
+
+  // ── Publish ──
+  function send(cmd) {
+    if (!client.connected) {
+      showToast('not connected');
+      return;
+    }
+    client.publish(TOPIC, cmd);
+    showToast(cmd === 'power' ? '⏻  power' : '→  ch ' + cmd);
+  }
+
+  // ── Toast feedback ──
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1500);
+  }
+</script>
+</body>
+</html>
