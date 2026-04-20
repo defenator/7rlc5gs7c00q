@@ -33,6 +33,77 @@
     font-family: 'Exo 2', sans-serif;
   }
 
+  /* ── Lock screen ── */
+  .lockscreen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 100;
+  }
+
+  .lock-icon {
+    width: 48px;
+    height: 48px;
+    stroke: var(--dim);
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .lock-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+
+  .lock-input {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    letter-spacing: 4px;
+    text-align: center;
+    padding: 14px 24px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .lock-input:focus {
+    border-color: var(--accent);
+  }
+
+  .lock-input.wrong {
+    border-color: var(--accent);
+    animation: shake 0.3s ease;
+  }
+
+  .lock-error {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .lock-error.show { opacity: 1; }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-8px); }
+    75%      { transform: translateX(8px); }
+  }
+
   .remote {
     width: 100%;
     max-width: 360px;
@@ -46,7 +117,6 @@
     gap: 24px;
   }
 
-  /* ── Header ── */
   .header {
     display: flex;
     align-items: center;
@@ -89,13 +159,11 @@
     box-shadow: 0 0 8px var(--glow);
   }
 
-  /* ── Divider ── */
   .divider {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--border), transparent);
   }
 
-  /* ── Power button ── */
   .power-wrap {
     display: flex;
     justify-content: center;
@@ -114,7 +182,6 @@
     align-items: center;
     justify-content: center;
     transition: transform 0.1s, box-shadow 0.1s;
-    position: relative;
   }
 
   .btn-power:active {
@@ -131,7 +198,6 @@
     stroke-linecap: round;
   }
 
-  /* ── Section label ── */
   .label {
     font-family: 'Share Tech Mono', monospace;
     font-size: 9px;
@@ -141,7 +207,6 @@
     text-transform: uppercase;
   }
 
-  /* ── Numpad ── */
   .numpad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -173,7 +238,6 @@
     color: #fff;
   }
 
-  /* zero spans full width */
   .btn-num.zero {
     grid-column: 1 / -1;
     aspect-ratio: unset;
@@ -181,7 +245,6 @@
     border-radius: 14px;
   }
 
-  /* ── Feedback toast ── */
   .toast {
     position: fixed;
     bottom: 32px;
@@ -208,8 +271,23 @@
 </style>
 </head>
 <body>
-<div class="remote">
 
+<!-- Lock screen -->
+<div class="lockscreen" id="lockscreen">
+  <svg class="lock-icon" viewBox="0 0 24 24">
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+  <div class="lock-title">enter pin</div>
+  <input class="lock-input" id="pin-input" type="password"
+         inputmode="numeric" maxlength="6"
+         placeholder="••••"
+         onkeydown="if(event.key==='Enter') checkPin()">
+  <div class="lock-error" id="lock-error">wrong pin</div>
+</div>
+
+<!-- Remote -->
+<div class="remote">
   <div class="header">
     <span class="brand">TV Remote</span>
     <div class="status">
@@ -220,7 +298,6 @@
 
   <div class="divider"></div>
 
-  <!-- Power -->
   <div class="power-wrap">
     <button class="btn-power" onclick="send('power')" aria-label="Power">
       <svg viewBox="0 0 24 24">
@@ -232,7 +309,6 @@
 
   <div class="label">channels</div>
 
-  <!-- Number pad -->
   <div class="numpad">
     <button class="btn-num" onclick="send('1')">1</button>
     <button class="btn-num" onclick="send('2')">2</button>
@@ -245,47 +321,75 @@
     <button class="btn-num" onclick="send('9')">9</button>
     <button class="btn-num zero" onclick="send('0')">0</button>
   </div>
-
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-  const MQTT_HOST  = "wss://17f6b2900b8c495ea6ce783a7db77bf7.s1.eu.hivemq.cloud:8884/mqtt";
-  const MQTT_USER  = "tvremote";
-  const MQTT_PASS  = "Remote112!";
-  const TOPIC      = "home/tv/command";
+  // ── Change this to whatever PIN you want ──
+  const CORRECT_PIN = "1234";
 
+  // ── MQTT config ──
+  const MQTT_HOST = "wss://17f6b2900b8c495ea6ce783a7db77bf7.s1.eu.hivemq.cloud:8884/mqtt";
+  const MQTT_USER = "tvremote";
+  const MQTT_PASS = "Remote112!";
+  const TOPIC     = "home/tv/command";
+
+  const lockscreen = document.getElementById('lockscreen');
+  const pinInput   = document.getElementById('pin-input');
+  const lockError  = document.getElementById('lock-error');
   const dot        = document.getElementById('dot');
   const statusText = document.getElementById('status-text');
   const toast      = document.getElementById('toast');
   let toastTimer;
+  let client;
 
-  // ── MQTT connect ──
-  const client = mqtt.connect(MQTT_HOST, {
-    username:  MQTT_USER,
-    password:  MQTT_PASS,
-    reconnectPeriod: 3000,
+  // ── Auto-check PIN as digits are typed ──
+  pinInput.addEventListener('input', () => {
+    if (pinInput.value.length === CORRECT_PIN.length) checkPin();
   });
 
-  client.on('connect', () => {
-    dot.className = 'dot connected';
-    statusText.textContent = 'online';
-  });
+  function checkPin() {
+    if (pinInput.value === CORRECT_PIN) {
+      lockscreen.style.display = 'none';
+      initMQTT();
+    } else {
+      pinInput.classList.add('wrong');
+      lockError.classList.add('show');
+      setTimeout(() => {
+        pinInput.classList.remove('wrong');
+        pinInput.value = '';
+      }, 600);
+      setTimeout(() => lockError.classList.remove('show'), 1500);
+    }
+  }
 
-  client.on('error', () => {
-    dot.className = 'dot error';
-    statusText.textContent = 'error';
-  });
+  // ── MQTT — only starts after correct PIN ──
+  function initMQTT() {
+    client = mqtt.connect(MQTT_HOST, {
+      username: MQTT_USER,
+      password: MQTT_PASS,
+      reconnectPeriod: 3000,
+    });
 
-  client.on('offline', () => {
-    dot.className = 'dot';
-    statusText.textContent = 'offline';
-  });
+    client.on('connect', () => {
+      dot.className = 'dot connected';
+      statusText.textContent = 'online';
+    });
 
-  // ── Publish ──
+    client.on('error', () => {
+      dot.className = 'dot error';
+      statusText.textContent = 'error';
+    });
+
+    client.on('offline', () => {
+      dot.className = 'dot';
+      statusText.textContent = 'offline';
+    });
+  }
+
   function send(cmd) {
-    if (!client.connected) {
+    if (!client || !client.connected) {
       showToast('not connected');
       return;
     }
@@ -293,13 +397,15 @@
     showToast(cmd === 'power' ? '⏻  power' : '→  ch ' + cmd);
   }
 
-  // ── Toast feedback ──
   function showToast(msg) {
     toast.textContent = msg;
     toast.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove('show'), 1500);
   }
+
+  // Focus PIN input on load
+  pinInput.focus();
 </script>
 </body>
 </html>
